@@ -10,9 +10,13 @@ import SwiftData
 
 @main
 struct BirdEggsApp: App {
+    @StateObject private var settings = SettingsManager.shared
+    @State private var showLoading = true
+    @State private var showPrivacy = false
+    
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
-            Item.self,
+            GameResult.self,
         ])
         let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
 
@@ -25,7 +29,26 @@ struct BirdEggsApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ZStack {
+                if showLoading {
+                    LoadingView()
+                        .onAppear {
+                            // Через 6 секунд переходим к следующему экрану (временно изменено с 1.8)
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 6.0) {
+                                showLoading = false
+                                if !settings.isPrivacyAccepted {
+                                    showPrivacy = true
+                                }
+                            }
+                        }
+                } else if showPrivacy {
+                    PrivacyView(mode: .accept, onAccept: {
+                        showPrivacy = false
+                    })
+                } else {
+                    HomeView()
+                }
+            }
         }
         .modelContainer(sharedModelContainer)
     }
