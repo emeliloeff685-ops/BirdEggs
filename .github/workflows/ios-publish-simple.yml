@@ -42,27 +42,29 @@ jobs:
         env:
           DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
         run: |
-          # Build archive без подписи (подпись будет при экспорте)
+          echo "Building archive with Team ID: $DEVELOPMENT_TEAM"
+          
+          # Build archive с автоматической подписью
+          set -o pipefail
           xcodebuild clean archive \
             -project BirdEggs.xcodeproj \
             -scheme BirdEggs \
             -archivePath $RUNNER_TEMP/BirdEggs.xcarchive \
             -configuration Release \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            2>&1 | tee build.log || {
-            echo "Build failed, trying with automatic signing..."
-            xcodebuild clean archive \
-              -project BirdEggs.xcodeproj \
-              -scheme BirdEggs \
-              -archivePath $RUNNER_TEMP/BirdEggs.xcarchive \
-              -configuration Release \
-              CODE_SIGN_STYLE=Automatic \
-              DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
-              -allowProvisioningUpdates \
-              2>&1 | tee build.log
-          }
+            CODE_SIGN_STYLE=Automatic \
+            DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
+            -allowProvisioningUpdates \
+            2>&1 | tee build.log
+          
+          # Проверяем результат
+          if [ ${PIPESTATUS[0]} -ne 0 ]; then
+            echo "❌ Build failed!"
+            echo "Last 50 lines of build log:"
+            tail -50 build.log
+            exit 1
+          fi
+          
+          echo "✅ Archive built successfully"
       
       - name: Export IPA
         env:
