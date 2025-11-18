@@ -207,7 +207,9 @@ jobs:
         env:
           KEYCHAIN_PATH: ${{ env.KEYCHAIN_PATH }}
         run: |
-          if [ -n "$KEYCHAIN_PATH" ] && [ -f "$KEYCHAIN_PATH" ]; then
-            security delete-keychain $KEYCHAIN_PATH || true
+          if [ -n "$KEYCHAIN_PATH" ]; then
+            if [ -f "$KEYCHAIN_PATH" ]; then
+              security delete-keychain $KEYCHAIN_PATH || true
+            fi
             rm -rf ~/Library/MobileDevice/Provisioning\ Profiles/* || true
           fi
