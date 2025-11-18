@@ -44,8 +44,12 @@ jobs:
         run: |
           echo "Building archive with Team ID: $DEVELOPMENT_TEAM"
           
-          # Build archive с автоматической подписью
+          # Для автоматической подписи нужен аккаунт Apple Developer
+          # Используем xcodebuild с автоматической подписью и allowProvisioningUpdates
+          # Это позволит Xcode автоматически создать/обновить provisioning profiles
           set -o pipefail
+          
+          # Пробуем собрать с автоматической подписью
           xcodebuild clean archive \
             -project BirdEggs.xcodeproj \
             -scheme BirdEggs \
@@ -54,13 +58,19 @@ jobs:
             CODE_SIGN_STYLE=Automatic \
             DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
             -allowProvisioningUpdates \
+            PROVISIONING_PROFILE_SPECIFIER="" \
             2>&1 | tee build.log
           
           # Проверяем результат
-          if [ ${PIPESTATUS[0]} -ne 0 ]; then
-            echo "❌ Build failed!"
-            echo "Last 50 lines of build log:"
-            tail -50 build.log
+          BUILD_EXIT_CODE=${PIPESTATUS[0]}
+          if [ $BUILD_EXIT_CODE -ne 0 ]; then
+            echo "❌ Build failed with exit code $BUILD_EXIT_CODE"
+            echo ""
+            echo "=== Build Log (last 100 lines) ==="
+            tail -100 build.log
+            echo ""
+            echo "=== Checking for common issues ==="
+            grep -i "error\|warning\|failed" build.log | tail -20 || echo "No specific errors found"
             exit 1
           fi
           
