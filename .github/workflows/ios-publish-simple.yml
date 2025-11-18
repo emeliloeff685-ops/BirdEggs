@@ -167,9 +167,9 @@ jobs:
             echo "Updating exportOptions.plist for manual signing with UUID: $PROVISIONING_PROFILE_UUID"
             # Создаём временный plist с правильными настройками используя PlistBuddy
             cp exportOptions.plist exportOptions_manual.plist
-            /usr/libexec/PlistBuddy -c "Set :method app-store-connect" exportOptions_manual.plist
-            /usr/libexec/PlistBuddy -c "Set :signingStyle manual" exportOptions_manual.plist
-            /usr/libexec/PlistBuddy -c "Set :provisioningProfiles:com.collector.eggscollector.BirdEggs $PROVISIONING_PROFILE_UUID" exportOptions_manual.plist
+            /usr/libexec/PlistBuddy -c 'Set :method app-store-connect' exportOptions_manual.plist
+            /usr/libexec/PlistBuddy -c 'Set :signingStyle manual' exportOptions_manual.plist
+            /usr/libexec/PlistBuddy -c "Set ':provisioningProfiles:com.collector.eggscollector.BirdEggs' '$PROVISIONING_PROFILE_UUID'" exportOptions_manual.plist
             EXPORT_OPTIONS_FILE="exportOptions_manual.plist"
           else
             EXPORT_OPTIONS_FILE="exportOptions.plist"
