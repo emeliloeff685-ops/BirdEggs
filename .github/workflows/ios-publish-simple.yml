@@ -38,42 +38,62 @@ jobs:
           echo "$APP_STORE_CONNECT_API_KEY_CONTENT" > ~/.appstoreconnect/private_keys/AuthKey.p8
           chmod 600 ~/.appstoreconnect/private_keys/AuthKey.p8
       
-      - name: Build Archive with Automatic Signing
+      - name: Build Archive
         env:
           DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
         run: |
-          # Build archive
+          # Build archive без подписи (подпись будет при экспорте)
           xcodebuild clean archive \
             -project BirdEggs.xcodeproj \
             -scheme BirdEggs \
             -archivePath $RUNNER_TEMP/BirdEggs.xcarchive \
             -configuration Release \
-            CODE_SIGN_STYLE=Automatic \
-            DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
-            -allowProvisioningUpdates \
-            | xcpretty || xcodebuild clean archive \
-            -project BirdEggs.xcodeproj \
-            -scheme BirdEggs \
-            -archivePath $RUNNER_TEMP/BirdEggs.xcarchive \
-            -configuration Release \
-            CODE_SIGN_STYLE=Automatic \
-            DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
-            -allowProvisioningUpdates
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            2>&1 | tee build.log || {
+            echo "Build failed, trying with automatic signing..."
+            xcodebuild clean archive \
+              -project BirdEggs.xcodeproj \
+              -scheme BirdEggs \
+              -archivePath $RUNNER_TEMP/BirdEggs.xcarchive \
+              -configuration Release \
+              CODE_SIGN_STYLE=Automatic \
+              DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
+              -allowProvisioningUpdates \
+              2>&1 | tee build.log
+          }
       
       - name: Export IPA
         env:
           DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
         run: |
+          # Проверяем наличие архива
+          if [ ! -d "$RUNNER_TEMP/BirdEggs.xcarchive" ]; then
+            echo "❌ Archive not found!"
+            exit 1
+          fi
+          
+          # Экспортируем IPA с автоматической подписью
           xcodebuild -exportArchive \
             -archivePath $RUNNER_TEMP/BirdEggs.xcarchive \
             -exportPath $RUNNER_TEMP/export \
             -exportOptionsPlist exportOptions.plist \
             -allowProvisioningUpdates \
-            | xcpretty || xcodebuild -exportArchive \
-            -archivePath $RUNNER_TEMP/BirdEggs.xcarchive \
-            -exportPath $RUNNER_TEMP/export \
-            -exportOptionsPlist exportOptions.plist \
-            -allowProvisioningUpdates
+            2>&1 | tee export.log || {
+            echo "Export failed, checking logs..."
+            cat export.log
+            exit 1
+          }
+          
+          # Проверяем наличие IPA
+          if [ ! -f "$RUNNER_TEMP/export/BirdEggs.ipa" ]; then
+            echo "❌ IPA file not found!"
+            ls -la $RUNNER_TEMP/export/
+            exit 1
+          fi
+          
+          echo "✅ IPA exported successfully"
       
       - name: Upload to App Store Connect
         env:
