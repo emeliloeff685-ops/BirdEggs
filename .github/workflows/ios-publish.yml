@@ -1,11 +1,12 @@
 name: Build and Publish iOS App
 
+# ОТКЛЮЧЕНО - используется ios-publish-simple.yml
+# Этот workflow отключен, чтобы избежать дублирования сборок
+
 on:
-  # Отключено - используется ios-publish-simple.yml
-  # push:
-  #   tags:
-  #     - 'v*'  # Запускается при создании тега вида v1.0.0
-  workflow_dispatch:  # Позволяет запускать вручную из GitHub UI
+  # Все триггеры отключены
+  workflow_dispatch:
+    # Отключено для предотвращения дублирования
     inputs:
       version:
         description: 'Version to publish (e.g., 1.0.0)'
