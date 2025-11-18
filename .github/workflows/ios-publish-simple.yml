@@ -1,0 +1,84 @@
+name: Build and Publish iOS App (Simple)
+
+on:
+  push:
+    tags:
+      - 'v*'  # Запускается при создании тега вида v1.0.0
+  workflow_dispatch:  # Позволяет запускать вручную из GitHub UI
+
+jobs:
+  build-and-publish:
+    runs-on: macos-14
+    timeout-minutes: 60
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+      
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+      
+      - name: Install Fastlane
+        run: gem install fastlane
+      
+      - name: Setup App Store Connect API Key
+        env:
+          APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo "$APP_STORE_CONNECT_API_KEY_CONTENT" > ~/.appstoreconnect/private_keys/AuthKey.p8
+          chmod 600 ~/.appstoreconnect/private_keys/AuthKey.p8
+      
+      - name: Build Archive with Automatic Signing
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
+        run: |
+          # Build archive using fastlane (автоматически управляет подписью)
+          fastlane build_archive \
+            apple_id: "$APPLE_ID" \
+            app_specific_password: "$APPLE_APP_SPECIFIC_PASSWORD" \
+            team_id: "$DEVELOPMENT_TEAM" \
+            || xcodebuild clean archive \
+              -project BirdEggs.xcodeproj \
+              -scheme BirdEggs \
+              -archivePath $RUNNER_TEMP/BirdEggs.xcarchive \
+              -configuration Release \
+              CODE_SIGN_STYLE=Automatic \
+              DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
+              | xcpretty
+      
+      - name: Export IPA
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath $RUNNER_TEMP/BirdEggs.xcarchive \
+            -exportPath $RUNNER_TEMP/export \
+            -exportOptionsPlist exportOptions.plist \
+            | xcpretty
+      
+      - name: Upload to App Store Connect
+        env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+        run: |
+          # Используем fastlane для загрузки через App Store Connect API
+          fastlane deliver \
+            --ipa "$RUNNER_TEMP/export/BirdEggs.ipa" \
+            --api_key_path ~/.appstoreconnect/private_keys/AuthKey.p8 \
+            --api_key_id "$APP_STORE_CONNECT_API_KEY_ID" \
+            --api_issuer "$APP_STORE_CONNECT_ISSUER_ID" \
+            --skip_screenshots \
+            --skip_metadata \
+            --force \
+            --submit_for_review false
+
