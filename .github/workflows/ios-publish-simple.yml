@@ -28,6 +28,7 @@ jobs:
       
       - name: Install Fastlane
         run: gem install fastlane
+        continue-on-error: true
       
       - name: Setup App Store Connect API Key
         env:
@@ -39,31 +40,40 @@ jobs:
       
       - name: Build Archive with Automatic Signing
         env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
         run: |
-          # Build archive using fastlane (автоматически управляет подписью)
-          fastlane build_archive \
-            apple_id: "$APPLE_ID" \
-            app_specific_password: "$APPLE_APP_SPECIFIC_PASSWORD" \
-            team_id: "$DEVELOPMENT_TEAM" \
-            || xcodebuild clean archive \
-              -project BirdEggs.xcodeproj \
-              -scheme BirdEggs \
-              -archivePath $RUNNER_TEMP/BirdEggs.xcarchive \
-              -configuration Release \
-              CODE_SIGN_STYLE=Automatic \
-              DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
-              | xcpretty
+          # Build archive
+          xcodebuild clean archive \
+            -project BirdEggs.xcodeproj \
+            -scheme BirdEggs \
+            -archivePath $RUNNER_TEMP/BirdEggs.xcarchive \
+            -configuration Release \
+            CODE_SIGN_STYLE=Automatic \
+            DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
+            -allowProvisioningUpdates \
+            | xcpretty || xcodebuild clean archive \
+            -project BirdEggs.xcodeproj \
+            -scheme BirdEggs \
+            -archivePath $RUNNER_TEMP/BirdEggs.xcarchive \
+            -configuration Release \
+            CODE_SIGN_STYLE=Automatic \
+            DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
+            -allowProvisioningUpdates
       
       - name: Export IPA
+        env:
+          DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
         run: |
           xcodebuild -exportArchive \
             -archivePath $RUNNER_TEMP/BirdEggs.xcarchive \
             -exportPath $RUNNER_TEMP/export \
             -exportOptionsPlist exportOptions.plist \
-            | xcpretty
+            -allowProvisioningUpdates \
+            | xcpretty || xcodebuild -exportArchive \
+            -archivePath $RUNNER_TEMP/BirdEggs.xcarchive \
+            -exportPath $RUNNER_TEMP/export \
+            -exportOptionsPlist exportOptions.plist \
+            -allowProvisioningUpdates
       
       - name: Upload to App Store Connect
         env:
