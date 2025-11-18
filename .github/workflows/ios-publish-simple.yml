@@ -38,27 +38,72 @@ jobs:
           echo "$APP_STORE_CONNECT_API_KEY_CONTENT" > ~/.appstoreconnect/private_keys/AuthKey.p8
           chmod 600 ~/.appstoreconnect/private_keys/AuthKey.p8
       
+      - name: Setup Code Signing (if certificates provided)
+        if: ${{ secrets.BUILD_CERTIFICATE_BASE64 != '' }}
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+          BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.BUILD_PROVISION_PROFILE_BASE64 }}
+        run: |
+          # Создаём временный keychain
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          PP_PATH=$RUNNER_TEMP/build_pp.mobileprovision
+          
+          # Декодируем сертификат и provisioning profile
+          echo "$BUILD_CERTIFICATE_BASE64" | base64 --decode > $CERTIFICATE_PATH
+          echo "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode > $PP_PATH
+          
+          # Создаём keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          
+          # Импортируем сертификат
+          security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+          
+          # Применяем provisioning profile
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
+          
+          # Получаем identity сертификата
+          CERT_IDENTITY=$(security find-identity -v -p codesigning $KEYCHAIN_PATH | head -1 | grep -o '".*"' | sed 's/"//g')
+          echo "CERT_IDENTITY=$CERT_IDENTITY" >> $GITHUB_ENV
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
+          echo "✅ Code signing setup completed"
+      
       - name: Build Archive
         env:
           DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
         run: |
           echo "Building archive with Team ID: $DEVELOPMENT_TEAM"
-          
-          # Для автоматической подписи нужен аккаунт Apple Developer
-          # Используем xcodebuild с автоматической подписью и allowProvisioningUpdates
-          # Это позволит Xcode автоматически создать/обновить provisioning profiles
           set -o pipefail
           
-          # Пробуем собрать с автоматической подписью
+          # Определяем метод подписи
+          if [ -n "$CERT_IDENTITY" ] && [ -n "$KEYCHAIN_PATH" ]; then
+            echo "Using manual code signing with certificate: $CERT_IDENTITY"
+            CODE_SIGN_STYLE="Manual"
+            CODE_SIGN_IDENTITY="$CERT_IDENTITY"
+            ADDITIONAL_FLAGS=""
+          else
+            echo "Using automatic code signing"
+            CODE_SIGN_STYLE="Automatic"
+            CODE_SIGN_IDENTITY=""
+            ADDITIONAL_FLAGS="-allowProvisioningUpdates"
+          fi
+          
+          # Собираем архив
           xcodebuild clean archive \
             -project BirdEggs.xcodeproj \
             -scheme BirdEggs \
             -archivePath $RUNNER_TEMP/BirdEggs.xcarchive \
             -configuration Release \
-            CODE_SIGN_STYLE=Automatic \
+            CODE_SIGN_STYLE="$CODE_SIGN_STYLE" \
+            ${CODE_SIGN_IDENTITY:+CODE_SIGN_IDENTITY="$CODE_SIGN_IDENTITY"} \
             DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
-            -allowProvisioningUpdates \
-            PROVISIONING_PROFILE_SPECIFIER="" \
+            $ADDITIONAL_FLAGS \
             2>&1 | tee build.log
           
           # Проверяем результат
@@ -71,6 +116,10 @@ jobs:
             echo ""
             echo "=== Checking for common issues ==="
             grep -i "error\|warning\|failed" build.log | tail -20 || echo "No specific errors found"
+            echo ""
+            echo "💡 Tip: If you see 'No Accounts' error, you need to:"
+            echo "   1. Export your certificate (.p12) and provisioning profile"
+            echo "   2. Add them to GitHub Secrets as BUILD_CERTIFICATE_BASE64 and BUILD_PROVISION_PROFILE_BASE64"
             exit 1
           fi
           
@@ -144,4 +193,10 @@ jobs:
           }
           
           echo "✅ Upload completed successfully!"
+      
+      - name: Cleanup Keychain
+        if: always() && env.KEYCHAIN_PATH != ''
+        run: |
+          security delete-keychain $KEYCHAIN_PATH || true
+          rm -rf ~/Library/MobileDevice/Provisioning\ Profiles/* || true
 
