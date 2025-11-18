@@ -3,15 +3,10 @@ name: Build and Publish iOS App
 # ОТКЛЮЧЕНО - используется ios-publish-simple.yml
 # Этот workflow отключен, чтобы избежать дублирования сборок
 
+# Полностью отключен - используется ios-publish-simple.yml
 on:
-  # Все триггеры отключены
-  workflow_dispatch:
-    # Отключено для предотвращения дублирования
-    inputs:
-      version:
-        description: 'Version to publish (e.g., 1.0.0)'
-        required: true
-        type: string
+  # Нет триггеров - workflow не будет запускаться
+  workflow_dispatch: false
 
 jobs:
   build-and-publish:
