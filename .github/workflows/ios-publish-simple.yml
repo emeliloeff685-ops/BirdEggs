@@ -165,34 +165,11 @@ jobs:
           # Обновляем exportOptions.plist если используется ручная подпись
           if [ -n "$PROVISIONING_PROFILE_UUID" ]; then
             echo "Updating exportOptions.plist for manual signing with UUID: $PROVISIONING_PROFILE_UUID"
-            # Создаём временный plist с правильными настройками
-            cat > exportOptions_manual.plist << EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-	<key>method</key>
-	<string>app-store-connect</string>
-	<key>teamID</key>
-	<string>$DEVELOPMENT_TEAM</string>
-	<key>uploadBitcode</key>
-	<false/>
-	<key>uploadSymbols</key>
-	<true/>
-	<key>compileBitcode</key>
-	<false/>
-	<key>signingStyle</key>
-	<string>manual</string>
-	<key>signingCertificate</key>
-	<string>Apple Distribution</string>
-	<key>provisioningProfiles</key>
-	<dict>
-		<key>com.collector.eggscollector.BirdEggs</key>
-		<string>$PROVISIONING_PROFILE_UUID</string>
-	</dict>
-</dict>
-</plist>
-EOF
+            # Создаём временный plist с правильными настройками используя PlistBuddy
+            cp exportOptions.plist exportOptions_manual.plist
+            /usr/libexec/PlistBuddy -c "Set :method app-store-connect" exportOptions_manual.plist
+            /usr/libexec/PlistBuddy -c "Set :signingStyle manual" exportOptions_manual.plist
+            /usr/libexec/PlistBuddy -c "Set :provisioningProfiles:com.collector.eggscollector.BirdEggs $PROVISIONING_PROFILE_UUID" exportOptions_manual.plist
             EXPORT_OPTIONS_FILE="exportOptions_manual.plist"
           else
             EXPORT_OPTIONS_FILE="exportOptions.plist"
