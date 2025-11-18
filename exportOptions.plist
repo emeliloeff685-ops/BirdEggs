@@ -16,5 +16,10 @@
 	<string>automatic</string>
 	<key>signingCertificate</key>
 	<string>Apple Distribution</string>
+	<key>provisioningProfiles</key>
+	<dict>
+		<key>com.collector.eggscollector.BirdEggs</key>
+		<string></string>
+	</dict>
 </dict>
 </plist>

@@ -74,12 +74,27 @@ jobs:
           
           # Применяем provisioning profile
           mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
-          cp $PP_PATH ~/Library/MobileDevice/Provisioning\ Profiles
+          
+          # Извлекаем UUID из provisioning profile
+          PP_UUID=$(/usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< $(security cms -D -i "$PP_PATH") 2>/dev/null || \
+            grep -aA1 UUID "$PP_PATH" | grep -o '[-A-F0-9]\{36\}' | head -1)
+          
+          if [ -z "$PP_UUID" ]; then
+            echo "⚠️ Could not extract UUID from provisioning profile, using filename"
+            PP_UUID=$(basename "$PP_PATH" .mobileprovision)
+          fi
+          
+          PP_DEST="$HOME/Library/MobileDevice/Provisioning Profiles/${PP_UUID}.mobileprovision"
+          cp "$PP_PATH" "$PP_DEST"
+          
+          echo "Provisioning Profile UUID: $PP_UUID"
+          echo "Provisioning Profile path: $PP_DEST"
           
           # Получаем identity сертификата
           CERT_IDENTITY=$(security find-identity -v -p codesigning $KEYCHAIN_PATH | head -1 | grep -o '".*"' | sed 's/"//g')
           echo "CERT_IDENTITY=$CERT_IDENTITY" >> $GITHUB_ENV
           echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
+          echo "PROVISIONING_PROFILE_UUID=$PP_UUID" >> $GITHUB_ENV
           echo "✅ Code signing setup completed"
       
       - name: Build Archive
@@ -90,15 +105,18 @@ jobs:
           set -o pipefail
           
           # Определяем метод подписи
-          if [ -n "$CERT_IDENTITY" ] && [ -n "$KEYCHAIN_PATH" ]; then
+          if [ -n "$CERT_IDENTITY" ] && [ -n "$KEYCHAIN_PATH" ] && [ -n "$PROVISIONING_PROFILE_UUID" ]; then
             echo "Using manual code signing with certificate: $CERT_IDENTITY"
+            echo "Using provisioning profile: $PROVISIONING_PROFILE_UUID"
             CODE_SIGN_STYLE="Manual"
             CODE_SIGN_IDENTITY="$CERT_IDENTITY"
+            PROVISIONING_PROFILE_SPECIFIER="$PROVISIONING_PROFILE_UUID"
             ADDITIONAL_FLAGS=""
           else
             echo "Using automatic code signing"
             CODE_SIGN_STYLE="Automatic"
             CODE_SIGN_IDENTITY=""
+            PROVISIONING_PROFILE_SPECIFIER=""
             ADDITIONAL_FLAGS="-allowProvisioningUpdates"
           fi
           
@@ -110,6 +128,7 @@ jobs:
             -configuration Release \
             CODE_SIGN_STYLE="$CODE_SIGN_STYLE" \
             ${CODE_SIGN_IDENTITY:+CODE_SIGN_IDENTITY="$CODE_SIGN_IDENTITY"} \
+            ${PROVISIONING_PROFILE_SPECIFIER:+PROVISIONING_PROFILE_SPECIFIER="$PROVISIONING_PROFILE_SPECIFIER"} \
             DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
             $ADDITIONAL_FLAGS \
             2>&1 | tee build.log
