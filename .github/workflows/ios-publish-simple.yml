@@ -39,7 +39,7 @@ jobs:
           chmod 600 ~/.appstoreconnect/private_keys/AuthKey.p8
       
       - name: Setup Code Signing (if certificates provided)
-        if: ${{ secrets.BUILD_CERTIFICATE_BASE64 != '' }}
+        if: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
           P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
