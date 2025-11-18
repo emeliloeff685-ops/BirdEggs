@@ -162,12 +162,21 @@ jobs:
             exit 1
           fi
           
-          # Экспортируем IPA с автоматической подписью
+          # Обновляем exportOptions.plist если используется ручная подпись
+          if [ -n "$PROVISIONING_PROFILE_UUID" ]; then
+            echo "Updating exportOptions.plist for manual signing..."
+            /usr/libexec/PlistBuddy -c "Set :signingStyle Manual" exportOptions.plist 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Add :signingStyle string Manual" exportOptions.plist 2>/dev/null || true
+            /usr/libexec/PlistBuddy -c "Set :provisioningProfiles:com.collector.eggscollector.BirdEggs $PROVISIONING_PROFILE_UUID" exportOptions.plist 2>/dev/null || \
+            /usr/libexec/PlistBuddy -c "Add :provisioningProfiles:com.collector.eggscollector.BirdEggs string $PROVISIONING_PROFILE_UUID" exportOptions.plist 2>/dev/null || true
+          fi
+          
+          # Экспортируем IPA
           xcodebuild -exportArchive \
             -archivePath $RUNNER_TEMP/BirdEggs.xcarchive \
             -exportPath $RUNNER_TEMP/export \
             -exportOptionsPlist exportOptions.plist \
-            -allowProvisioningUpdates \
+            ${PROVISIONING_PROFILE_UUID:+-allowProvisioningUpdates} \
             2>&1 | tee export.log || {
             echo "Export failed, checking logs..."
             cat export.log
