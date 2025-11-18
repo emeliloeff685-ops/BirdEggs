@@ -103,14 +103,35 @@ jobs:
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
         run: |
+          echo "📤 Uploading IPA to App Store Connect..."
+          
+          # Проверяем наличие IPA
+          if [ ! -f "$RUNNER_TEMP/export/BirdEggs.ipa" ]; then
+            echo "❌ IPA file not found!"
+            exit 1
+          fi
+          
+          echo "IPA file size: $(du -h $RUNNER_TEMP/export/BirdEggs.ipa | cut -f1)"
+          
           # Используем fastlane для загрузки через App Store Connect API
           fastlane deliver \
             --ipa "$RUNNER_TEMP/export/BirdEggs.ipa" \
             --api_key_path ~/.appstoreconnect/private_keys/AuthKey.p8 \
             --api_key_id "$APP_STORE_CONNECT_API_KEY_ID" \
             --api_issuer "$APP_STORE_CONNECT_ISSUER_ID" \
+            --app_identifier "com.collector.eggscollector.BirdEggs" \
             --skip_screenshots \
             --skip_metadata \
+            --skip_app_version_update \
             --force \
-            --submit_for_review false
+            --submit_for_review false \
+            --verbose \
+            2>&1 | tee upload.log || {
+            echo "❌ Upload failed!"
+            echo "Last 100 lines of upload log:"
+            tail -100 upload.log
+            exit 1
+          }
+          
+          echo "✅ Upload completed successfully!"
 
