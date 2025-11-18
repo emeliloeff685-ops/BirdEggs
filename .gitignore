@@ -98,6 +98,7 @@ iOSInjectionProject/
 *.mobileprovision
 AuthKey.p8
 ~/.appstoreconnect/
+certificates/
 
 # Build artifacts
 *.xcarchive
