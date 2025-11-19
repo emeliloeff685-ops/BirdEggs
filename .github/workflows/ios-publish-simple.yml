@@ -242,7 +242,7 @@ jobs:
               export APP_STORE_CONNECT_API_KEY_PATH="$API_KEY_PATH"
               
               # Используем deliver напрямую через fastlane
-              bundle exec fastlane deliver \
+              fastlane deliver \
                 --ipa "$RUNNER_TEMP/export/BirdEggs.ipa" \
                 --api_key_path "$API_KEY_PATH" \
                 --api_key "$APP_STORE_CONNECT_API_KEY_ID" \
@@ -276,6 +276,7 @@ jobs:
               echo ""
               exit 1
             }
+          }
           
           echo "✅ Upload completed successfully!"
           echo "📱 Check App Store Connect: https://appstoreconnect.apple.com"
