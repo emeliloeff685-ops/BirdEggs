@@ -223,21 +223,50 @@ jobs:
             gem install fastlane
           fi
           
-          # Используем fastlane deliver для загрузки
-          echo "📤 Uploading with fastlane deliver..."
-          fastlane deliver \
-            --ipa "$RUNNER_TEMP/export/BirdEggs.ipa" \
-            --api_key_path "$API_KEY_PATH" \
-            --api_key_id "$APP_STORE_CONNECT_API_KEY_ID" \
-            --api_issuer "$APP_STORE_CONNECT_ISSUER_ID" \
-            --app_identifier "com.collector.eggscollector.BirdEggs" \
-            --skip_screenshots \
-            --skip_metadata \
-            --skip_app_version_update \
-            --force \
-            --submit_for_review false \
+          # Используем xcrun altool для загрузки (более надежный метод)
+          echo "📤 Uploading with xcrun altool..."
+          
+          xcrun altool --upload-app \
+            --type ios \
+            --file "$RUNNER_TEMP/export/BirdEggs.ipa" \
+            --apiKey "$APP_STORE_CONNECT_API_KEY_ID" \
+            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID" \
             --verbose \
             2>&1 | tee upload.log || {
+              
+              # Если xcrun altool не работает, пробуем fastlane deliver с правильным синтаксисом
+              echo "⚠️ xcrun altool failed, trying fastlane deliver..."
+              
+              # Используем переменные окружения для fastlane
+              export FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD=""
+              export FASTLANE_USER=""
+              
+              # Создаем временный Fastfile для правильной конфигурации
+              mkdir -p fastlane
+              cat > fastlane/Fastfile << EOF
+default_platform(:ios)
+
+platform :ios do
+  desc "Upload to App Store Connect"
+  lane :upload do
+    deliver(
+      ipa: "$RUNNER_TEMP/export/BirdEggs.ipa",
+      api_key_path: "$API_KEY_PATH",
+      api_key: "$APP_STORE_CONNECT_API_KEY_ID",
+      api_issuer: "$APP_STORE_CONNECT_ISSUER_ID",
+      app_identifier: "com.collector.eggscollector.BirdEggs",
+      skip_screenshots: true,
+      skip_metadata: true,
+      skip_app_version_update: true,
+      force: true,
+      submit_for_review: false
+    )
+  end
+end
+EOF
+              
+              fastlane upload \
+                2>&1 | tee -a upload.log || {
               echo "❌ Upload failed!"
               echo ""
               echo "=== Upload Log (last 100 lines) ==="
