@@ -211,10 +211,23 @@ jobs:
           
           echo "IPA file size: $(du -h $RUNNER_TEMP/export/BirdEggs.ipa | cut -f1)"
           
-          # Используем fastlane для загрузки через App Store Connect API
+          # Создаем временный файл для API ключа
+          API_KEY_PATH=~/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo "$APP_STORE_CONNECT_API_KEY_CONTENT" > "$API_KEY_PATH"
+          chmod 600 "$API_KEY_PATH"
+          
+          # Проверяем наличие fastlane
+          if ! command -v fastlane &> /dev/null; then
+            echo "⚠️ Fastlane not found, installing..."
+            gem install fastlane
+          fi
+          
+          # Используем fastlane deliver для загрузки
+          echo "📤 Uploading with fastlane deliver..."
           fastlane deliver \
             --ipa "$RUNNER_TEMP/export/BirdEggs.ipa" \
-            --api_key_path ~/.appstoreconnect/private_keys/AuthKey.p8 \
+            --api_key_path "$API_KEY_PATH" \
             --api_key_id "$APP_STORE_CONNECT_API_KEY_ID" \
             --api_issuer "$APP_STORE_CONNECT_ISSUER_ID" \
             --app_identifier "com.collector.eggscollector.BirdEggs" \
@@ -225,13 +238,31 @@ jobs:
             --submit_for_review false \
             --verbose \
             2>&1 | tee upload.log || {
-            echo "❌ Upload failed!"
-            echo "Last 100 lines of upload log:"
-            tail -100 upload.log
-            exit 1
-          }
+              echo "❌ Upload failed!"
+              echo ""
+              echo "=== Upload Log (last 100 lines) ==="
+              tail -100 upload.log
+              echo ""
+              echo "=== Common Issues ==="
+              echo "1. App not found in App Store Connect"
+              echo "   → Create app at: https://appstoreconnect.apple.com"
+              echo "   → Bundle ID must match: com.collector.eggscollector.BirdEggs"
+              echo ""
+              echo "2. API Key issues"
+              echo "   → Check Key ID: $APP_STORE_CONNECT_API_KEY_ID"
+              echo "   → Check Issuer ID: $APP_STORE_CONNECT_ISSUER_ID"
+              echo "   → Verify key has 'App Manager' or 'Admin' access"
+              echo ""
+              echo "3. Check App Store Connect Activity"
+              echo "   → Go to: https://appstoreconnect.apple.com"
+              echo "   → My Apps → Your App → Activity"
+              echo ""
+              exit 1
+            }
           
           echo "✅ Upload completed successfully!"
+          echo "📱 Check App Store Connect: https://appstoreconnect.apple.com"
+          echo "   Go to: My Apps → Your App → TestFlight or App Store → Versions"
       
       - name: Cleanup Keychain
         if: always()
