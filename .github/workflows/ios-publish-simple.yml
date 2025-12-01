@@ -196,7 +196,15 @@ jobs:
             /usr/libexec/PlistBuddy -c "Set ':provisioningProfiles:com.collector.eggscollector.BirdEggs1' '$PROVISIONING_PROFILE_UUID'" exportOptions_manual.plist
             EXPORT_OPTIONS_FILE="exportOptions_manual.plist"
           else
-            EXPORT_OPTIONS_FILE="exportOptions.plist"
+            echo "Using automatic signing for export"
+            # Создаём временный plist с автоматической подписью
+            cp exportOptions.plist exportOptions_auto.plist
+            /usr/libexec/PlistBuddy -c 'Set :method app-store-connect' exportOptions_auto.plist
+            /usr/libexec/PlistBuddy -c 'Set :signingStyle automatic' exportOptions_auto.plist
+            /usr/libexec/PlistBuddy -c 'Set :teamID' "$DEVELOPMENT_TEAM" exportOptions_auto.plist
+            # Удаляем provisioningProfiles для автоматической подписи
+            /usr/libexec/PlistBuddy -c 'Delete :provisioningProfiles' exportOptions_auto.plist 2>/dev/null || true
+            EXPORT_OPTIONS_FILE="exportOptions_auto.plist"
           fi
           
           # Экспортируем IPA
@@ -204,16 +212,28 @@ jobs:
             -archivePath $RUNNER_TEMP/BirdEggs.xcarchive \
             -exportPath $RUNNER_TEMP/export \
             -exportOptionsPlist "$EXPORT_OPTIONS_FILE" \
+            -allowProvisioningUpdates \
             2>&1 | tee export.log || {
             echo "Export failed, checking logs..."
             cat export.log
+            echo ""
+            echo "⚠️ Export failed. This usually means:"
+            echo "1. No provisioning profile found for Bundle ID: com.collector.eggscollector.BirdEggs1"
+            echo "2. Automatic signing requires Apple ID account"
+            echo ""
+            echo "Solution: Add certificates to GitHub Secrets:"
+            echo "  - BUILD_CERTIFICATE_BASE64"
+            echo "  - BUILD_PROVISION_PROFILE_BASE64"
+            echo "  - P12_PASSWORD"
+            echo "  - KEYCHAIN_PASSWORD"
             exit 1
           }
           
           # Проверяем наличие IPA
           if [ ! -f "$RUNNER_TEMP/export/BirdEggs.ipa" ]; then
             echo "❌ IPA file not found!"
-            ls -la $RUNNER_TEMP/export/
+            echo "Checking export directory..."
+            ls -la $RUNNER_TEMP/export/ 2>/dev/null || echo "Export directory does not exist"
             exit 1
           fi
           
