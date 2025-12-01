@@ -1,5 +1,12 @@
 # App Store Listing Texts
 
+## Subtitle
+(30 characters max - appears under app name)
+
+Catch eggs, avoid bombs!
+
+---
+
 ## Promotional Text
 (170 characters max - appears above the description)
 
