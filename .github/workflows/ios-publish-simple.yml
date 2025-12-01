@@ -138,26 +138,23 @@ jobs:
             $ADDITIONAL_FLAGS \
             2>&1 | tee build.log || {
             
-            # Если сборка с автоматической подписью не удалась, пробуем собрать без подписи
-            if [ "$CODE_SIGN_STYLE" = "Automatic" ]; then
-              echo "⚠️ Automatic signing failed, trying to build without signing..."
-              echo "We'll sign during export step"
-              
-              xcodebuild clean archive \
-                -project BirdEggs.xcodeproj \
-                -scheme BirdEggs \
-                -archivePath $RUNNER_TEMP/BirdEggs.xcarchive \
-                -configuration Release \
-                CODE_SIGNING_ALLOWED=NO \
-                CODE_SIGNING_REQUIRED=NO \
-                DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
-                2>&1 | tee -a build.log || {
-                echo "❌ Build failed even without signing"
-                exit 1
-              }
-            else
-              exit 1
-            fi
+            # Если сборка с автоматической подписью не удалась, выводим ошибку
+            echo "❌ Build failed with automatic signing"
+            echo ""
+            echo "=== Build Log (last 100 lines) ==="
+            tail -100 build.log
+            echo ""
+            echo "=== Solution ==="
+            echo "Automatic code signing requires Apple ID account in Xcode."
+            echo "For CI/CD, you need to use manual code signing with certificates:"
+            echo "1. Export your Distribution certificate (.p12) from Keychain"
+            echo "2. Download App Store provisioning profile for Bundle ID: com.collector.eggscollector.BirdEggs1"
+            echo "3. Add to GitHub Secrets:"
+            echo "   - BUILD_CERTIFICATE_BASE64 (base64 encoded .p12)"
+            echo "   - P12_PASSWORD (password for .p12)"
+            echo "   - KEYCHAIN_PASSWORD (temporary keychain password)"
+            echo "   - BUILD_PROVISION_PROFILE_BASE64 (base64 encoded .mobileprovision)"
+            exit 1
           }
           
           # Проверяем результат
