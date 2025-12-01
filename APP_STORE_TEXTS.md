@@ -70,5 +70,5 @@ Download now and start catching eggs! Can you beat your high score?
 ## Keywords
 (100 characters max, comma-separated)
 
-bird,eggs,arcade,game,catch,collector,fun,casual,action,reflex,skill,challenge,free,puzzle,timekiller
+bird,eggs,arcade,game,catch,collector,fun,casual,action,reflex,skill,challenge,free,puzzle
 
