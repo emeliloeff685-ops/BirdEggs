@@ -169,7 +169,7 @@ jobs:
             cp exportOptions.plist exportOptions_manual.plist
             /usr/libexec/PlistBuddy -c 'Set :method app-store-connect' exportOptions_manual.plist
             /usr/libexec/PlistBuddy -c 'Set :signingStyle manual' exportOptions_manual.plist
-            /usr/libexec/PlistBuddy -c "Set ':provisioningProfiles:com.collector.eggscollector.BirdEggs' '$PROVISIONING_PROFILE_UUID'" exportOptions_manual.plist
+            /usr/libexec/PlistBuddy -c "Set ':provisioningProfiles:com.collector.eggscollector.BirdEggs1' '$PROVISIONING_PROFILE_UUID'" exportOptions_manual.plist
             EXPORT_OPTIONS_FILE="exportOptions_manual.plist"
           else
             EXPORT_OPTIONS_FILE="exportOptions.plist"
@@ -247,7 +247,7 @@ jobs:
                 --api_key_path "$API_KEY_PATH" \
                 --api_key "$APP_STORE_CONNECT_API_KEY_ID" \
                 --api_issuer "$APP_STORE_CONNECT_ISSUER_ID" \
-                --app_identifier "com.collector.eggscollector.BirdEggs" \
+                --app_identifier "com.collector.eggscollector.BirdEggs1" \
                 --skip_screenshots \
                 --skip_metadata \
                 --skip_app_version_update \
@@ -263,7 +263,7 @@ jobs:
               echo "=== Common Issues ==="
               echo "1. App not found in App Store Connect"
               echo "   → Create app at: https://appstoreconnect.apple.com"
-              echo "   → Bundle ID must match: com.collector.eggscollector.BirdEggs"
+              echo "   → Bundle ID must match: com.collector.eggscollector.BirdEggs1"
               echo ""
               echo "2. API Key issues"
               echo "   → Check Key ID: $APP_STORE_CONNECT_API_KEY_ID"
