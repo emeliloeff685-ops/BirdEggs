@@ -114,13 +114,18 @@ jobs:
             ADDITIONAL_FLAGS=""
           else
             echo "Using automatic code signing"
+            echo "⚠️ Note: Automatic signing requires Apple ID account"
+            echo "If this fails, you need to add certificates to GitHub Secrets"
             CODE_SIGN_STYLE="Automatic"
             CODE_SIGN_IDENTITY=""
             PROVISIONING_PROFILE_SPECIFIER=""
+            # Пробуем использовать -allowProvisioningUpdates для автоматической подписи
+            # Но это может не работать без Apple ID
             ADDITIONAL_FLAGS="-allowProvisioningUpdates"
           fi
           
           # Собираем архив
+          # Если автоматическая подпись не работает, пробуем собрать без подписи
           xcodebuild clean archive \
             -project BirdEggs.xcodeproj \
             -scheme BirdEggs \
@@ -131,7 +136,29 @@ jobs:
             ${PROVISIONING_PROFILE_SPECIFIER:+PROVISIONING_PROFILE_SPECIFIER="$PROVISIONING_PROFILE_SPECIFIER"} \
             DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
             $ADDITIONAL_FLAGS \
-            2>&1 | tee build.log
+            2>&1 | tee build.log || {
+            
+            # Если сборка с автоматической подписью не удалась, пробуем собрать без подписи
+            if [ "$CODE_SIGN_STYLE" = "Automatic" ]; then
+              echo "⚠️ Automatic signing failed, trying to build without signing..."
+              echo "We'll sign during export step"
+              
+              xcodebuild clean archive \
+                -project BirdEggs.xcodeproj \
+                -scheme BirdEggs \
+                -archivePath $RUNNER_TEMP/BirdEggs.xcarchive \
+                -configuration Release \
+                CODE_SIGNING_ALLOWED=NO \
+                CODE_SIGNING_REQUIRED=NO \
+                DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
+                2>&1 | tee -a build.log || {
+                echo "❌ Build failed even without signing"
+                exit 1
+              }
+            else
+              exit 1
+            fi
+          }
           
           # Проверяем результат
           BUILD_EXIT_CODE=${PIPESTATUS[0]}
