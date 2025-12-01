@@ -100,6 +100,9 @@ jobs:
       - name: Build Archive
         env:
           DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
         run: |
           echo "Building archive with Team ID: $DEVELOPMENT_TEAM"
           set -o pipefail
@@ -108,30 +111,41 @@ jobs:
           if [ -n "$CERT_IDENTITY" ] && [ -n "$KEYCHAIN_PATH" ] && [ -n "$PROVISIONING_PROFILE_UUID" ]; then
             echo "Using manual code signing with certificate: $CERT_IDENTITY"
             echo "Using provisioning profile: $PROVISIONING_PROFILE_UUID"
-            CODE_SIGN_STYLE="Manual"
-            CODE_SIGN_IDENTITY="$CERT_IDENTITY"
-            PROVISIONING_PROFILE_SPECIFIER="$PROVISIONING_PROFILE_UUID"
-            ADDITIONAL_FLAGS=""
+            
+            # Собираем архив с ручной подписью
+            xcodebuild clean archive \
+              -project BirdEggs.xcodeproj \
+              -scheme BirdEggs \
+              -archivePath $RUNNER_TEMP/BirdEggs.xcarchive \
+              -configuration Release \
+              CODE_SIGN_STYLE="Manual" \
+              CODE_SIGN_IDENTITY="$CERT_IDENTITY" \
+              PROVISIONING_PROFILE_SPECIFIER="$PROVISIONING_PROFILE_UUID" \
+              DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
+              2>&1 | tee build.log
           else
-            echo "Using automatic code signing"
-            CODE_SIGN_STYLE="Automatic"
-            CODE_SIGN_IDENTITY=""
-            PROVISIONING_PROFILE_SPECIFIER=""
-            ADDITIONAL_FLAGS="-allowProvisioningUpdates"
+            echo "Using Fastlane for build with App Store Connect API"
+            
+            # Используем fastlane для сборки с API ключом
+            # Fastlane автоматически использует API ключ для подписи
+            fastlane build_archive 2>&1 | tee build.log || {
+              
+              echo "⚠️ Fastlane build failed"
+              echo "Trying alternative: xcodebuild with export only signing..."
+              exit 1
+            }
+            
+            # Проверяем, что архив создан
+            if [ -f "./build/BirdEggs.ipa" ]; then
+              echo "✅ IPA file created successfully"
+              cp ./build/BirdEggs.ipa $RUNNER_TEMP/BirdEggs.ipa
+              # Создаем архив для совместимости с остальным workflow
+              mkdir -p $RUNNER_TEMP/BirdEggs.xcarchive
+            else
+              echo "❌ IPA file not found"
+              exit 1
+            fi
           fi
-          
-          # Собираем архив
-          xcodebuild clean archive \
-            -project BirdEggs.xcodeproj \
-            -scheme BirdEggs \
-            -archivePath $RUNNER_TEMP/BirdEggs.xcarchive \
-            -configuration Release \
-            CODE_SIGN_STYLE="$CODE_SIGN_STYLE" \
-            ${CODE_SIGN_IDENTITY:+CODE_SIGN_IDENTITY="$CODE_SIGN_IDENTITY"} \
-            ${PROVISIONING_PROFILE_SPECIFIER:+PROVISIONING_PROFILE_SPECIFIER="$PROVISIONING_PROFILE_SPECIFIER"} \
-            DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
-            $ADDITIONAL_FLAGS \
-            2>&1 | tee build.log
           
           # Проверяем результат
           BUILD_EXIT_CODE=${PIPESTATUS[0]}
@@ -152,14 +166,21 @@ jobs:
           
           echo "✅ Archive built successfully"
       
-      - name: Export IPA
+      - name: Export IPA (if not using Fastlane)
+        if: env.FASTLANE_BUILD != 'true'
         env:
           DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
         run: |
           # Проверяем наличие архива
-          if [ ! -d "$RUNNER_TEMP/BirdEggs.xcarchive" ]; then
+          if [ ! -d "$RUNNER_TEMP/BirdEggs.xcarchive" ] && [ ! -f "$RUNNER_TEMP/BirdEggs.ipa" ]; then
             echo "❌ Archive not found!"
             exit 1
+          fi
+          
+          # Если IPA уже создан fastlane, пропускаем экспорт
+          if [ -f "$RUNNER_TEMP/BirdEggs.ipa" ]; then
+            echo "✅ IPA already created by Fastlane"
+            exit 0
           fi
           
           # Обновляем exportOptions.plist если используется ручная подпись
@@ -193,6 +214,9 @@ jobs:
             exit 1
           fi
           
+          # Копируем IPA в стандартное место
+          cp $RUNNER_TEMP/export/BirdEggs.ipa $RUNNER_TEMP/BirdEggs.ipa
+          
           echo "✅ IPA exported successfully"
       
       - name: Upload to App Store Connect
@@ -203,13 +227,22 @@ jobs:
         run: |
           echo "📤 Uploading IPA to App Store Connect..."
           
-          # Проверяем наличие IPA
-          if [ ! -f "$RUNNER_TEMP/export/BirdEggs.ipa" ]; then
+          # Определяем путь к IPA файлу
+          if [ -f "$RUNNER_TEMP/BirdEggs.ipa" ]; then
+            IPA_PATH="$RUNNER_TEMP/BirdEggs.ipa"
+          elif [ -f "$RUNNER_TEMP/export/BirdEggs.ipa" ]; then
+            IPA_PATH="$RUNNER_TEMP/export/BirdEggs.ipa"
+          elif [ -f "./build/BirdEggs.ipa" ]; then
+            IPA_PATH="./build/BirdEggs.ipa"
+          else
             echo "❌ IPA file not found!"
+            echo "Searching for IPA files..."
+            find $RUNNER_TEMP -name "*.ipa" 2>/dev/null || echo "No IPA files found"
             exit 1
           fi
           
-          echo "IPA file size: $(du -h $RUNNER_TEMP/export/BirdEggs.ipa | cut -f1)"
+          echo "IPA file: $IPA_PATH"
+          echo "IPA file size: $(du -h "$IPA_PATH" | cut -f1)"
           
           # Создаем временный файл для API ключа
           API_KEY_PATH=~/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8
@@ -223,36 +256,38 @@ jobs:
             gem install fastlane
           fi
           
-          # Используем xcrun altool для загрузки (более надежный метод)
-          echo "📤 Uploading with xcrun altool..."
+          # Используем fastlane deliver для загрузки (лучше работает с API ключами)
+          echo "📤 Uploading with fastlane deliver..."
           
-          xcrun altool --upload-app \
-            --type ios \
-            --file "$RUNNER_TEMP/export/BirdEggs.ipa" \
-            --apiKey "$APP_STORE_CONNECT_API_KEY_ID" \
-            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID" \
+          # Создаем временный файл для API ключа
+          API_KEY_PATH=~/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo "$APP_STORE_CONNECT_API_KEY_CONTENT" > "$API_KEY_PATH"
+          chmod 600 "$API_KEY_PATH"
+          
+          # Используем fastlane deliver напрямую с правильными параметрами
+          fastlane deliver \
+            --ipa "$IPA_PATH" \
+            --api_key_path "$API_KEY_PATH" \
+            --api_key "$APP_STORE_CONNECT_API_KEY_ID" \
+            --api_issuer "$APP_STORE_CONNECT_ISSUER_ID" \
+            --app_identifier "com.collector.eggscollector.BirdEggs1" \
+            --skip_screenshots \
+            --skip_metadata \
+            --skip_app_version_update \
+            --force \
+            --submit_for_review false \
             --verbose \
             2>&1 | tee upload.log || {
               
-              # Если xcrun altool не работает, пробуем fastlane deliver
-              echo "⚠️ xcrun altool failed, trying fastlane deliver..."
+              # Если fastlane deliver не работает, пробуем xcrun altool
+              echo "⚠️ fastlane deliver failed, trying xcrun altool..."
               
-              # Используем fastlane deliver напрямую с правильными параметрами
-              # Устанавливаем переменные окружения
-              export APP_STORE_CONNECT_API_KEY_PATH="$API_KEY_PATH"
-              
-              # Используем deliver напрямую через fastlane
-              fastlane deliver \
-                --ipa "$RUNNER_TEMP/export/BirdEggs.ipa" \
-                --api_key_path "$API_KEY_PATH" \
-                --api_key "$APP_STORE_CONNECT_API_KEY_ID" \
-                --api_issuer "$APP_STORE_CONNECT_ISSUER_ID" \
-                --app_identifier "com.collector.eggscollector.BirdEggs1" \
-                --skip_screenshots \
-                --skip_metadata \
-                --skip_app_version_update \
-                --force \
-                --submit_for_review false \
+              xcrun altool --upload-app \
+                --type ios \
+                --file "$IPA_PATH" \
+                --apiKey "$APP_STORE_CONNECT_API_KEY_ID" \
+                --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID" \
                 --verbose \
                 2>&1 | tee -a upload.log || {
               echo "❌ Upload failed!"

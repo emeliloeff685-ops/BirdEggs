@@ -5,7 +5,16 @@ default_platform(:ios)
 platform :ios do
   desc "Build archive"
   lane :build_archive do |options|
-    # Сборка архива
+    # Настройка API ключа для автоматической подписи
+    api_key = {
+      key_id: ENV["APP_STORE_CONNECT_API_KEY_ID"],
+      issuer_id: ENV["APP_STORE_CONNECT_ISSUER_ID"],
+      key_filepath: "~/.appstoreconnect/private_keys/AuthKey_#{ENV['APP_STORE_CONNECT_API_KEY_ID']}.p8",
+      duration: 1200,
+      in_house: false
+    }
+    
+    # Сборка архива с автоматической подписью через API
     build_app(
       workspace: nil,
       project: "BirdEggs.xcodeproj",
@@ -16,12 +25,14 @@ platform :ios do
         uploadBitcode: false,
         uploadSymbols: true,
         compileBitcode: false,
-        signingStyle: "automatic"
+        signingStyle: "automatic",
+        teamID: ENV["DEVELOPMENT_TEAM"]
       },
       output_directory: "./build",
       output_name: "BirdEggs.ipa",
       clean: true,
-      configuration: "Release"
+      configuration: "Release",
+      api_key: api_key
     )
   end
 
