@@ -32,11 +32,19 @@ jobs:
       
       - name: Setup App Store Connect API Key
         env:
+          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
         run: |
           mkdir -p ~/.appstoreconnect/private_keys
-          echo "$APP_STORE_CONNECT_API_KEY_CONTENT" > ~/.appstoreconnect/private_keys/AuthKey.p8
-          chmod 600 ~/.appstoreconnect/private_keys/AuthKey.p8
+          API_KEY_PATH=~/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8
+          echo "$APP_STORE_CONNECT_API_KEY_CONTENT" > "$API_KEY_PATH"
+          chmod 600 "$API_KEY_PATH"
+          echo "✅ API key saved to: $API_KEY_PATH"
+          
+          # Устанавливаем переменные окружения для Fastlane
+          echo "APP_STORE_CONNECT_API_KEY_PATH=$API_KEY_PATH" >> $GITHUB_ENV
+          echo "APP_STORE_CONNECT_API_KEY_ID=$APP_STORE_CONNECT_API_KEY_ID" >> $GITHUB_ENV
+          echo "APP_STORE_CONNECT_ISSUER_ID=${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}" >> $GITHUB_ENV
       
       - name: Setup Code Signing (if certificates provided)
         env:
@@ -102,7 +110,7 @@ jobs:
           DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_CONTENT }}
+          APP_STORE_CONNECT_API_KEY_PATH: ${{ env.APP_STORE_CONNECT_API_KEY_PATH }}
         run: |
           echo "Building archive with Team ID: $DEVELOPMENT_TEAM"
           set -o pipefail
@@ -125,24 +133,39 @@ jobs:
               2>&1 | tee build.log
           else
             echo "Using Fastlane for build with App Store Connect API"
+            echo "API Key Path: $APP_STORE_CONNECT_API_KEY_PATH"
             
-            # Используем fastlane для сборки с API ключом
-            # Fastlane автоматически использует API ключ для подписи
+            # Используем fastlane для сборки
+            # Fastlane автоматически использует API ключ из переменных окружения
             fastlane build_archive 2>&1 | tee build.log || {
               
               echo "⚠️ Fastlane build failed"
-              echo "Trying alternative: xcodebuild with export only signing..."
-              exit 1
+              echo "Trying alternative: xcodebuild with automatic signing..."
+              
+              # Fallback: пробуем xcodebuild с автоматической подписью
+              xcodebuild clean archive \
+                -project BirdEggs.xcodeproj \
+                -scheme BirdEggs \
+                -archivePath $RUNNER_TEMP/BirdEggs.xcarchive \
+                -configuration Release \
+                CODE_SIGN_STYLE="Automatic" \
+                DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" \
+                -allowProvisioningUpdates \
+                2>&1 | tee -a build.log || {
+                echo "❌ Build failed"
+                exit 1
+              }
             }
             
-            # Проверяем, что архив создан
+            # Проверяем, что IPA создан
             if [ -f "./build/BirdEggs.ipa" ]; then
-              echo "✅ IPA file created successfully"
+              echo "✅ IPA file created successfully by Fastlane"
               cp ./build/BirdEggs.ipa $RUNNER_TEMP/BirdEggs.ipa
-              # Создаем архив для совместимости с остальным workflow
-              mkdir -p $RUNNER_TEMP/BirdEggs.xcarchive
+              echo "FASTLANE_BUILD=true" >> $GITHUB_ENV
+            elif [ -d "$RUNNER_TEMP/BirdEggs.xcarchive" ]; then
+              echo "✅ Archive created, will export in next step"
             else
-              echo "❌ IPA file not found"
+              echo "❌ Neither IPA nor archive found"
               exit 1
             fi
           fi
