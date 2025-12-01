@@ -3,7 +3,7 @@
 ## Subtitle
 (30 characters max - appears under app name)
 
-Catch eggs, avoid bombs!
+Fast-paced egg catching game
 
 ---
 
@@ -70,5 +70,5 @@ Download now and start catching eggs! Can you beat your high score?
 ## Keywords
 (100 characters max, comma-separated)
 
-bird,eggs,arcade,game,catch,collector,fun,casual,action,reflex,skill,challenge,free
+bird,eggs,arcade,game,catch,collector,fun,casual,action,reflex,skill,challenge,free,puzzle,timekiller
 
