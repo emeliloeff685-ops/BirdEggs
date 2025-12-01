@@ -5,11 +5,7 @@ default_platform(:ios)
 platform :ios do
   desc "Build archive"
   lane :build_archive do |options|
-    # Настройка API ключа через переменные окружения
-    # Fastlane автоматически использует API ключ из переменных окружения
-    # или из файла ~/.appstoreconnect/private_keys/
-    
-    # Сборка архива с автоматической подписью
+    # Сборка архива
     build_app(
       workspace: nil,
       project: "BirdEggs.xcodeproj",
@@ -20,8 +16,7 @@ platform :ios do
         uploadBitcode: false,
         uploadSymbols: true,
         compileBitcode: false,
-        signingStyle: "automatic",
-        teamID: ENV["DEVELOPMENT_TEAM"]
+        signingStyle: "automatic"
       },
       output_directory: "./build",
       output_name: "BirdEggs.ipa",
@@ -30,11 +25,18 @@ platform :ios do
     )
   end
 
-  desc "Upload IPA to App Store Connect"
-  lane :upload_ipa do |options|
+  desc "Upload to App Store Connect"
+  lane :upload_to_app_store do |options|
     # Загрузка в App Store Connect через API
-    # API ключ будет автоматически использован из переменных окружения
     upload_to_app_store(
+      api_key_path: "~/.appstoreconnect/private_keys/AuthKey.p8",
+      api_key: {
+        key_id: ENV["APP_STORE_CONNECT_API_KEY_ID"],
+        issuer_id: ENV["APP_STORE_CONNECT_ISSUER_ID"],
+        key_filepath: "~/.appstoreconnect/private_keys/AuthKey.p8",
+        duration: 1200,
+        in_house: false
+      },
       skip_screenshots: true,
       skip_metadata: true,
       force: true,
@@ -46,7 +48,6 @@ platform :ios do
   desc "Build and publish"
   lane :build_and_publish do |options|
     build_archive
-    upload_ipa
+    upload_to_app_store
   end
 end
-
