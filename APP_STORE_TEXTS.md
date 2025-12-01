@@ -72,3 +72,10 @@ Download now and start catching eggs! Can you beat your high score?
 
 bird,eggs,arcade,game,catch,collector,fun,casual,action,reflex,skill,challenge,free,puzzle
 
+---
+
+## Copyright
+(Required for App Store)
+
+Copyright © 2025 Gautham Hariharan. All rights reserved.
+
