@@ -18,7 +18,7 @@
 	<string>Apple Distribution</string>
 	<key>provisioningProfiles</key>
 	<dict>
-		<key>com.collector.eggscollector.BirdEggs</key>
+		<key>com.collector.eggscollector.BirdEggs1</key>
 		<string></string>
 	</dict>
 </dict>
